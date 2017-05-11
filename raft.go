@@ -4,6 +4,7 @@ import (
     "time"
     "github.com/BluePecker/raft/types"
     "github.com/BluePecker/snowflake"
+    "math/rand"
 )
 
 type raft struct {
@@ -12,14 +13,22 @@ type raft struct {
     
     refresh        chan struct{}
     
+    bill           types.Bill
+    
     clock          *types.Clock
     member         *types.Nodes
     identity       *types.Identity
     watcher        *types.Watcher
+    ballotBox      *types.Nodes
 }
 
 func iToSec(i int) time.Duration {
     return time.Duration(i) * time.Second
+}
+
+func randWait(millisecond int) {
+    WaitSec := rand.New(rand.NewSource(time.Now().UnixNano()))
+    time.Sleep(time.Duration(WaitSec.Intn(millisecond)) * time.Millisecond)
 }
 
 func (r *raft) Start() {
@@ -41,8 +50,61 @@ func (r *raft) Follower() {
     }
 }
 
-func (r *raft) Candidate() {
+func (r *raft) prepare() {
+    var BackupTerm uint64 = r.Term
+    for ; r.Term <= r.bill.Term; r.Term++ {}
     
+    // 投票给自己
+    r.bill = types.Bill{
+        Term: r.Term,
+        UniqueId: r.UniqueID,
+    }
+    
+    Sec := iToSec(r.clock.Second.Timeout)
+    r.clock.Timer.Timeout = time.NewTimer(Sec)
+    
+    var Canvassing = func(UniqueId uint64) {
+        if r.watcher.Canvassing != nil {
+            var Bill types.Bill = types.Bill{
+                Term: r.Term,
+                UniqueId: r.UniqueID,
+            }
+            if r.watcher.Canvassing(UniqueId, Bill) {
+                r.ballotBox.PushBack(r.Term, UniqueId)
+            }
+        }
+    }
+    
+    go func() {
+        Next := r.member.Front(BackupTerm)
+        for ; Next != nil; Next = Next.Next() {
+            UniqueId, ok := Next.Value.(uint64)
+            if ok && UniqueId != r.UniqueID {
+                // 拉票
+                go Canvassing(UniqueId)
+            }
+        }
+    }()
+}
+
+func (r *raft) Candidate() {
+    again:r.prepare()
+    for {
+        select {
+        case <-r.clock.Timer.Timeout.C:
+            if r.ballotBox.Len(r.Term) >= r.member.Len(r.Term) / 2 + 1 {
+                randWait(1000)
+                goto again
+            }
+            r.clock.Timer.Timeout.Stop()
+            go r.identity.BecomeLeader()
+            return
+        case <-r.refresh:
+            r.clock.Timer.Timeout.Stop()
+            go r.identity.BecomeFollower()
+            return
+        }
+    }
 }
 
 func (r *raft) Leader() {
@@ -57,7 +119,8 @@ func (r *raft) Leader() {
             return
         case <-r.clock.Ticker.Heartbeat.C:
             var Nodes []uint64;
-            for Next := r.member.Front(r.Term); Next != nil; Next = Next.Next() {
+            Next := r.member.Front(r.Term)
+            for ; Next != nil; Next = Next.Next() {
                 if NodeId, ok := Next.Value.(uint64); ok {
                     Nodes = append(Nodes, NodeId)
                 }
