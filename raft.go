@@ -4,6 +4,7 @@ import (
     "time"
     "github.com/BluePecker/raft/types"
     "github.com/BluePecker/snowflake"
+    "context"
 )
 
 type raft struct {
@@ -15,8 +16,7 @@ type raft struct {
     clock          *types.Clock
     member         *types.Nodes
     identity       *types.Identity
-    
-    //watcher //todo
+    watcher        *types.Watcher
 }
 
 func iToSec(i int) time.Duration {
@@ -57,7 +57,26 @@ func (r *raft) Leader() {
             r.identity.BecomeFollower()
             return
         case <-r.clock.Ticker.Heartbeat.C:
-        // todo heartbeat
+            var Nodes []uint64;
+            for Next := r.member.Front(r.Term); Next != nil; Next = Next.Next() {
+                if NodeId, ok := Next.Value.(uint64); ok {
+                    Nodes = append(Nodes, NodeId)
+                }
+            }
+            
+            go func(term, leaderId uint64, member []uint64) {
+                if r.watcher.Heartbeat != nil {
+                    // todo 确认此处是否正确
+                    Ctx, cancel := context.WithTimeout(context.Background(), Sec)
+                    go r.watcher.Heartbeat(cancel, term, leaderId, member)
+                    for {
+                        select {
+                        case <-Ctx.Done():
+                            return
+                        }
+                    }
+                }
+            }(r.Term, r.leaderID, Nodes)
         }
     }
 }
