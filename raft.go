@@ -136,6 +136,18 @@ func (r *raft) Leader() {
     }
 }
 
+// todo
+func (r *raft) Vote() bool {
+    
+    return true
+}
+
+// todo
+func (r *raft) Sync() {
+    
+    return true
+}
+
 func NewRafter(NodeId int64, Times types.Second) (*raft, error) {
     if err := Times.Validator(); err != nil {
         return nil, err
