@@ -17,27 +17,29 @@ type Identity struct {
     role chan int8
 }
 
+type politician interface {
+    Follower()
+    Candidate()
+    Leader()
+}
+
 func (i *Identity) init() {
     if i.role == nil {
         i.role = make(chan int8, 1)
     }
 }
 
-func (i *Identity) NightWatch(standby, campaign, order func()) {
+func (i *Identity) NightWatch(pol politician) {
     i.init()
-    
-    if len(i.role) < 1 {
-        i.role <- FOLLOWER
-    }
     
     for {
         switch <-i.role {
         case FOLLOWER:
-            go standby()
+            go pol.Follower()
         case CANDIDATE:
-            go campaign()
+            go pol.Candidate()
         case LEADER:
-            go order()
+            go pol.Leader()
         default:
             panic(errors.New("undefined identity"))
         }
@@ -60,7 +62,9 @@ func (i *Identity) BecomeLeader() {
 }
 
 func (i *Identity) New() *Identity {
-    return &Identity{
+    Identity := &Identity{
         role: make(chan int8, 1),
     }
+    Identity.role <- FOLLOWER
+    return Identity
 }

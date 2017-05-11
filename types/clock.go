@@ -1,16 +1,35 @@
 package types
 
-import "time"
+import (
+    "time"
+    "errors"
+)
+
+const SAFE_TIME = 5
+
+type Second struct {
+    Tenure, Timeout, Heartbeat int
+}
+
+func (s Second) Validator() error {
+    if s.Tenure < 0 || s.Timeout < 0 || s.Heartbeat < 0 {
+        return errors.New("tenure can not less than 0")
+    }
+    
+    if s.Tenure - s.Timeout - s.Heartbeat < SAFE_TIME {
+        return errors.New("tenure - timeout - heartbeat there is not enough safe space")
+    }
+    
+    return nil
+}
 
 type Clock struct {
-    Second struct {
-               tenure, timeout, heartbeat int
-           }
+    Second Second
     Timer  struct {
-               timeout *time.Timer
-               tenure  *time.Timer
+               Timeout *time.Timer
+               Tenure  *time.Timer
            }
     Ticker struct {
-               heartbeat *time.Ticker
+               Heartbeat *time.Ticker
            }
 }
