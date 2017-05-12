@@ -4,7 +4,6 @@ import (
     "time"
     "math/rand"
     "github.com/BluePecker/raft/types"
-    "github.com/BluePecker/snowflake"
 )
 
 type raft struct {
@@ -177,23 +176,13 @@ func (r *raft) NightWatch(Watcher *types.Watcher) {
     r.watcher = Watcher
 }
 
-func NewRafter(NodeId int64, Times types.Second) (*raft, error) {
+func NewRafter(NodeId uint64, Times types.Second) (*raft, error) {
     if err := Times.Validator(); err != nil {
         return nil, err
     }
     
-    IdWorker, err := snowflake.NewIdWorker(NodeId)
-    if err != nil {
-        return nil, err
-    }
-    
-    UniqueId, err := IdWorker.NextId()
-    if err != nil {
-        return nil, err
-    }
-    
     rafter := &raft{
-        UniqueId: uint64(UniqueId),
+        UniqueId: NodeId,
         Term: 0x0,
         leaderId: 0x0,
         refresh: make(chan struct{}),
