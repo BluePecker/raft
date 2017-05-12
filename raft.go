@@ -2,9 +2,9 @@ package raft
 
 import (
     "time"
+    "math/rand"
     "github.com/BluePecker/raft/types"
     "github.com/BluePecker/snowflake"
-    "math/rand"
 )
 
 type raft struct {
@@ -136,16 +136,26 @@ func (r *raft) Leader() {
     }
 }
 
-// todo
-func (r *raft) Vote() bool {
-    
+func (r *raft) Vote(Bill types.Bill) bool {
+    if Bill.Term <= r.bill.Term {
+        return false
+    }
+    r.refresh <- struct{}{}
+    r.bill = Bill
     return true
 }
 
-// todo
-func (r *raft) Sync() {
-    
-    return true
+func (r *raft) Sync(LeaderId, Term uint64, Members []uint64) {
+    if Term >= r.Term {
+        r.refresh <- struct{}{}
+        
+        r.Term = Term
+        r.leaderID = LeaderId
+        
+        for _, UniqueId := range Members {
+            r.member.PushBack(Term, UniqueId)
+        }
+    }
 }
 
 func NewRafter(NodeId int64, Times types.Second) (*raft, error) {
