@@ -8,8 +8,8 @@ import (
 )
 
 type raft struct {
-    Term, UniqueID uint64
-    leaderID       uint64
+    Term, UniqueId uint64
+    leaderId       uint64
     
     refresh        chan struct{}
     
@@ -22,13 +22,13 @@ type raft struct {
     ballotBox      *types.Nodes
 }
 
-func iToSec(i int) time.Duration {
-    return time.Duration(i) * time.Second
+func iToSec(I int) time.Duration {
+    return time.Duration(I) * time.Second
 }
 
-func randWait(millisecond int) {
+func randWait(Millisecond int) {
     WaitSec := rand.New(rand.NewSource(time.Now().UnixNano()))
-    time.Sleep(time.Duration(WaitSec.Intn(millisecond)) * time.Millisecond)
+    time.Sleep(time.Duration(WaitSec.Intn(Millisecond)) * time.Millisecond)
 }
 
 func (r *raft) Start() {
@@ -54,37 +54,53 @@ func (r *raft) prepare() {
     var BackupTerm uint64 = r.Term
     for ; r.Term <= r.bill.Term; r.Term++ {}
     
-    // 投票给自己
     r.bill = types.Bill{
         Term: r.Term,
-        UniqueId: r.UniqueID,
+        UniqueId: r.UniqueId,
     }
     
     Sec := iToSec(r.clock.Second.Timeout)
     r.clock.Timer.Timeout = time.NewTimer(Sec)
     
+    if r.ballotBox == nil {
+        r.ballotBox = &types.Nodes{}
+    }
+    
     var Canvassing = func(UniqueId uint64) {
-        if r.watcher.Canvassing != nil {
-            var Bill types.Bill = types.Bill{
-                Term: r.Term,
-                UniqueId: r.UniqueID,
-            }
-            if r.watcher.Canvassing(UniqueId, Bill) {
-                r.ballotBox.PushBack(r.Term, UniqueId)
-            }
+        if r.watcher.Canvassing == nil {
+            return
         }
+        var Bill types.Bill = types.Bill{
+            Term: r.Term,
+            UniqueId: r.UniqueId,
+        }
+        if r.watcher.Canvassing(UniqueId, Bill) {
+            return
+        }
+        r.ballotBox.PushBack(r.Term, UniqueId)
+    }
+    
+    if r.member == nil {
+        r.member = &types.Nodes{}
     }
     
     go func() {
         Next := r.member.Front(BackupTerm)
         for ; Next != nil; Next = Next.Next() {
             UniqueId, ok := Next.Value.(uint64)
-            if ok && UniqueId != r.UniqueID {
-                // 拉票
+            if ok && UniqueId != r.UniqueId {
                 go Canvassing(UniqueId)
             }
         }
     }()
+}
+
+func (r *raft) aggregate() bool {
+    if r.ballotBox != nil && r.member != nil {
+        Win := r.ballotBox.Len(r.Term) >= r.member.Len(r.Term) / 2 + 1
+        return Win
+    }
+    return false
 }
 
 func (r *raft) Candidate() {
@@ -92,7 +108,7 @@ func (r *raft) Candidate() {
     for {
         select {
         case <-r.clock.Timer.Timeout.C:
-            if r.ballotBox.Len(r.Term) >= r.member.Len(r.Term) / 2 + 1 {
+            if r.aggregate() {
                 randWait(1000)
                 goto again
             }
@@ -108,7 +124,7 @@ func (r *raft) Candidate() {
 }
 
 func (r *raft) Leader() {
-    r.leaderID = r.UniqueID
+    r.leaderId = r.UniqueId
     Sec := iToSec(r.clock.Second.Heartbeat)
     r.clock.Ticker.Heartbeat = time.NewTicker(Sec)
     for {
@@ -125,13 +141,12 @@ func (r *raft) Leader() {
                     Nodes = append(Nodes, NodeId)
                 }
             }
-            
             go func(term, leaderId uint64, member []uint64) {
-                if r.watcher.Heartbeat == nil {
+                if r.watcher == nil || r.watcher.Heartbeat == nil {
                     return
                 }
                 r.watcher.Heartbeat(term, leaderId, member)
-            }(r.Term, r.leaderID, Nodes)
+            }(r.Term, r.leaderId, Nodes)
         }
     }
 }
@@ -150,12 +165,17 @@ func (r *raft) Sync(LeaderId, Term uint64, Members []uint64) {
         r.refresh <- struct{}{}
         
         r.Term = Term
-        r.leaderID = LeaderId
+        r.leaderId = LeaderId
         
         for _, UniqueId := range Members {
             r.member.PushBack(Term, UniqueId)
         }
     }
+}
+
+// todo
+func (r *raft) NightWatch() {
+    
 }
 
 func NewRafter(NodeId int64, Times types.Second) (*raft, error) {
@@ -174,15 +194,15 @@ func NewRafter(NodeId int64, Times types.Second) (*raft, error) {
     }
     
     rafter := &raft{
-        UniqueID: uint64(UniqueId),
+        UniqueId: uint64(UniqueId),
         Term: 0x0,
-        leaderID: 0x0,
-        
+        leaderId: 0x0,
         refresh: make(chan struct{}),
-        
         clock: &types.Clock{
             Second: Times,
         },
+        member: &types.Nodes{},
+        ballotBox: &types.Nodes{},
     }
     
     rafter.identity = (&types.Identity{}).New()

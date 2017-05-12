@@ -30,6 +30,10 @@ func (n *Nodes) wCheck(Term uint64) bool {
         }
         n.number = Term
     }
+    if n.member == nil {
+        n.member = &list.List{}
+    }
+    
     return true
 }
 
@@ -86,6 +90,9 @@ func (n *Nodes) Remove(Term, UniqueId uint64) {
 func (n *Nodes) Len(Term uint64) int {
     n.locker.Lock()
     defer n.locker.Unlock()
+    if n.member == nil {
+        return 0
+    }
     return n.member.Len()
 }
 
