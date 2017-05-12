@@ -15,6 +15,7 @@ const (
 
 type Identity struct {
     role chan int8
+    Show int8
 }
 
 type politician interface {
@@ -48,16 +49,19 @@ func (i *Identity) NightWatch(pol politician) {
 
 func (i *Identity) BecomeFollower() {
     i.init()
+    i.Show = FOLLOWER
     i.role <- FOLLOWER
 }
 
 func (i *Identity) BecomeCandidate() {
     i.init()
+    i.Show = CANDIDATE
     i.role <- CANDIDATE
 }
 
 func (i *Identity) BecomeLeader() {
     i.init()
+    i.Show = LEADER
     i.role <- LEADER
 }
 
