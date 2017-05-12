@@ -173,9 +173,8 @@ func (r *raft) Sync(LeaderId, Term uint64, Members []uint64) {
     }
 }
 
-// todo
-func (r *raft) NightWatch() {
-    
+func (r *raft) NightWatch(Watcher *types.Watcher) {
+    r.watcher = Watcher
 }
 
 func NewRafter(NodeId int64, Times types.Second) (*raft, error) {
