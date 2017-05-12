@@ -5,7 +5,7 @@ import (
     "errors"
 )
 
-const SAFE_TIME = 5
+const SAFE_TIME = 2
 
 type Second struct {
     Tenure, Timeout, Heartbeat int
