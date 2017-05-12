@@ -8,14 +8,16 @@ import (
 )
 
 func TestNewRafter(t *testing.T) {
-    rafter, _ := NewRafter(1, types.Second{
-        Tenure: 8,
+    rafter, err := NewRafter(1, types.Second{
+        Tenure: 6,
         Timeout: 2,
         Heartbeat: 1,
     })
     
+    if err != nil {
+        t.Fatal(err)
+    }
     rafter.Start()
-    
     for {
         time.Sleep(time.Duration(1) * time.Second)
         fmt.Println(rafter.identity.Show)
