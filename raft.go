@@ -1,7 +1,6 @@
 package raft
 
 import (
-    //"fmt"
     "time"
     "math/rand"
     "github.com/BluePecker/raft/types"
@@ -66,9 +65,6 @@ func (r *raft) prepare() {
         UniqueId: r.UniqueId,
     }
     r.ballotBox.PushBack(r.Term, r.UniqueId)
-    
-    // todo check bug
-    //fmt.Println(r.UniqueId, ":", r.Term, "->", r.ballotBox.Len(r.Term), "/", BackupMembers)
     
     Sec := iToSec(r.clock.Second.Timeout)
     r.clock.Timer.Timeout = time.NewTimer(Sec)
