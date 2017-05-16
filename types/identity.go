@@ -28,6 +28,9 @@ func (i *Identity) init() {
     if i.role == nil {
         i.role = make(chan int8, 1)
     }
+    if i.Show < FOLLOWER {
+        i.Show = FOLLOWER
+    }
 }
 
 func (i *Identity) NightWatch(pol politician) {

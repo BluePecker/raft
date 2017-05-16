@@ -1,6 +1,7 @@
 package raft
 
 import (
+    //"fmt"
     "time"
     "math/rand"
     "github.com/BluePecker/raft/types"
@@ -31,7 +32,6 @@ func randWait(Millisecond int) {
 }
 
 func (r *raft) Start() {
-    // todo
     go r.identity.NightWatch(r)
 }
 
@@ -50,23 +50,31 @@ func (r *raft) Follower() {
 }
 
 func (r *raft) prepare() {
-    var BackupTerm uint64 = r.Term
-    for ; r.Term <= r.bill.Term; r.Term++ {}
+    var BackupMembers []uint64
+    for Next := r.member.Front(r.Term); Next != nil; Next = Next.Next() {
+        if UniqueId, ok := Next.Value.(uint64); ok {
+            BackupMembers = append(BackupMembers, UniqueId)
+        }
+    }
     
+    for ; r.Term <= r.bill.Term; r.Term++ {}
+    if r.ballotBox == nil {
+        r.ballotBox = &types.Nodes{}
+    }
     r.bill = types.Bill{
         Term: r.Term,
         UniqueId: r.UniqueId,
     }
+    r.ballotBox.PushBack(r.Term, r.UniqueId)
+    
+    // todo check bug
+    //fmt.Println(r.UniqueId, ":", r.Term, "->", r.ballotBox.Len(r.Term), "/", BackupMembers)
     
     Sec := iToSec(r.clock.Second.Timeout)
     r.clock.Timer.Timeout = time.NewTimer(Sec)
     
-    if r.ballotBox == nil {
-        r.ballotBox = &types.Nodes{}
-    }
-    
     var Canvassing = func(UniqueId uint64) {
-        if r.watcher.Canvassing == nil {
+        if r.watcher == nil || r.watcher.Canvassing == nil {
             return
         }
         var Bill types.Bill = types.Bill{
@@ -74,9 +82,8 @@ func (r *raft) prepare() {
             UniqueId: r.UniqueId,
         }
         if r.watcher.Canvassing(UniqueId, Bill) {
-            return
+            r.ballotBox.PushBack(r.Term, UniqueId)
         }
-        r.ballotBox.PushBack(r.Term, UniqueId)
     }
     
     if r.member == nil {
@@ -84,12 +91,9 @@ func (r *raft) prepare() {
     }
     
     go func() {
-        Next := r.member.Front(BackupTerm)
-        for ; Next != nil; Next = Next.Next() {
-            UniqueId, ok := Next.Value.(uint64)
-            if ok && UniqueId != r.UniqueId {
-                go Canvassing(UniqueId)
-            }
+        for _, UniqueId := range BackupMembers {
+            r.member.PushBack(r.Term, UniqueId)
+            go Canvassing(UniqueId)
         }
     }()
 }
@@ -104,10 +108,11 @@ func (r *raft) aggregate() bool {
 
 func (r *raft) Candidate() {
     again:r.prepare()
+    
     for {
         select {
         case <-r.clock.Timer.Timeout.C:
-            if r.aggregate() {
+            if !r.aggregate() {
                 randWait(1000)
                 goto again
             }
@@ -160,13 +165,14 @@ func (r *raft) Vote(Bill types.Bill) bool {
 }
 
 func (r *raft) Sync(LeaderId, Term uint64, Members []uint64) {
-    if Term >= r.Term {
+    if Term >= r.Term && LeaderId != r.UniqueId {
         r.refresh <- struct{}{}
         
         r.Term = Term
         r.leaderId = LeaderId
         
         for _, UniqueId := range Members {
+            r.member = &types.Nodes{}
             r.member.PushBack(Term, UniqueId)
         }
     }
@@ -176,7 +182,7 @@ func (r *raft) NightWatch(Watcher *types.Watcher) {
     r.watcher = Watcher
 }
 
-func NewRafter(NodeId uint64, Times types.Second) (*raft, error) {
+func NewRafter(NodeId uint64, Times types.Second, Members []uint64) (*raft, error) {
     if err := Times.Validator(); err != nil {
         return nil, err
     }
@@ -191,6 +197,10 @@ func NewRafter(NodeId uint64, Times types.Second) (*raft, error) {
         },
         member: &types.Nodes{},
         ballotBox: &types.Nodes{},
+    }
+    
+    for _, UniqueId := range Members {
+        rafter.member.PushBack(rafter.Term, UniqueId)
     }
     
     rafter.identity = (&types.Identity{}).New()
